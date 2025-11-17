@@ -1,0 +1,34 @@
+# Star Making Inference Configuration
+
+# LLM Model Configuration
+model:
+  provider: "local"  # "local" or "gemini"
+
+  # For local models (when provider: "local"):
+  family: "llama3.1"
+  size: "8b"
+  dtype: "auto"
+  device_map: "auto"
+
+  # For Gemini API (when provider: "gemini"):
+  model_name: "gemini-2.5-flash"  # or "gemini-1.5-pro-latest", etc.
+  # Requires GEMINI_API_KEY environment variable to be set
+
+# Experiment Parameters
+experiment:
+  n_trials: 20
+  num_participants: 1
+  rule_type: "learning"  # "learning" or "transfer"
+  seed: 42
+  specify_star: null  # Options: null, "Star_0", "Star_1", "Star_2", "Star_3"
+
+# Generation Parameters
+generation:
+  max_new_tokens: 512
+  temperature: 0.7
+  top_p: 0.9
+
+# Output Configuration
+output:
+  dir: "results"
+  save_json: true

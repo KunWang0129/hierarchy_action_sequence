@@ -1,0 +1,101 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# PyTorch
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Model weights and checkpoints
+models/
+checkpoints/
+*.bin
+
+# Outputs and Results
+outputs/
+results/
+logs/
+*.log
+
+# Hydra
+.hydra/
+hydra/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# SLURM
+slurm/
+slurm-*.out
+*.slurm.out
+*.err
+
+# Data
+data/
+datasets/
+*.csv
+*.tsv
+*.jsonl
+*.parquet
+
+# Environment variables
+.env
+.env.local
+*.secret
+
+# Cache
+.cache/
+*.cache
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Outputs and Results
+outputs/
+results/
+AGENTS.md
+
+# Future additions
+rl/

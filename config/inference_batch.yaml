@@ -1,0 +1,32 @@
+# Star Making Batched Inference Configuration
+
+# LLM Model Configuration
+model:
+  provider: "local"  # "local" or "gemini" (only "local" supports batching)
+
+  # For local models (when provider: "local"):
+  family: "qwen3"
+  size: "4b"
+  dtype: "auto"
+  device_map: "auto"
+  tensor_parallel_size: 1  # Number of GPUs for tensor parallelism (1, 2, 4, 8, etc.)
+
+# Experiment Parameters
+experiment:
+  n_trials: 10
+  num_participants: 40  # Total number of participants to process
+  n_agents: 4  # Number of agents to process in parallel per batch
+  rule_type: "learning"  # "learning" or "transfer"
+  seed: 42
+  specify_star: null  # Options: null, "Star_0", "Star_1", "Star_2", "Star_3"
+
+# Generation Parameters
+generation:
+  max_new_tokens: 512
+  temperature: 0.7
+  top_p: 0.9
+
+# Output Configuration
+output:
+  dir: "results"
+  save_json: true
