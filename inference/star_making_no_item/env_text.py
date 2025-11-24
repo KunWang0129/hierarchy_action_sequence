@@ -38,37 +38,23 @@ class StarMakingSimulator:
     def reset(self, goal_star=None):
         """Reset state for new trial."""
         self.actions = []
-        self.items = []
         self.goal_star = goal_star
 
     def step(self, action):
         """Take action and update state."""
         self.actions.append(action)
 
-        # Check for item creation at positions [0,1] or [2,3]
-        if len(self.actions) == 2 and len(self.items) == 0:
-            item = self.rules.get_item(self.actions, self.rule_type)
-            if item:
-                self.items.append(item)
-        elif len(self.actions) == 4 and len(self.items) == 1:
-            item = self.rules.get_item(self.actions[2:4], self.rule_type)
-            if item:
-                self.items.append(item)
-
     def is_complete(self):
         """Check if goal star is achieved."""
-        if len(self.items) == 2:
-            star = self.rules.get_star(self.items, self.rule_type)
+        if len(self.actions) == 4:
+            star = self.rules.get_star(self.actions, self.rule_type)
             return star == self.goal_star
         return False
 
     def get_state(self):
         """Return current state dict."""
-        # Ensure items array is always length 2, padding with None
-        items = self.items + [None] * (2 - len(self.items))
         return {
             'goal_star': self.goal_star,
-            'items': items,
             'actions': self.actions
         }
 

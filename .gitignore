@@ -97,5 +97,8 @@ outputs/
 results/
 AGENTS.md
 
+# Slurm scripts:
+slurm/
+
 # Future additions
 rl/

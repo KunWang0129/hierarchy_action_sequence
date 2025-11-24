@@ -1,0 +1,15 @@
+# Gemini experiment configuration
+
+model:
+  gemini_model: "gemini-2.5-flash"
+  thinking_budget: 256
+
+experiment:
+  num_participants: 40
+  n_trials: 80
+  n_agents: 4
+  transfer_rule_type: "transfer_low"  # Options: transfer_low, transfer_high
+
+output:
+  dir: "results"
+  save_json: true

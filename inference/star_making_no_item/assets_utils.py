@@ -35,18 +35,25 @@ class StarMakingRules:
 
     def __init__(self, encoding=1):
         self.encoding = ACTION_ENCODE_1 if encoding == 1 else ACTION_ENCODE_2
+        # Flattened rules: 4-action sequences directly produce stars
         self.learning_rules = {
-            'low': {(0,1): 'A', (2,3): 'B', (1,2): 'C', (3,0): 'D'},
-            'high': {('A','B'): 'Star_0', ('C','D'): 'Star_1', ('B','C'): 'Star_2', ('D','A'): 'Star_3'}
+            (0,1,2,3): 'Star_0',  # (0,1)→A + (2,3)→B → Star_0
+            (1,2,3,0): 'Star_1',  # (1,2)→C + (3,0)→D → Star_1
+            (2,3,1,2): 'Star_2',  # (2,3)→B + (1,2)→C → Star_2
+            (3,0,0,1): 'Star_3'   # (3,0)→D + (0,1)→A → Star_3
         }
         self.transfer_low_rules = {
-            'low': {(0,1): 'A', (2,3): 'B', (0,2): 'C', (3,1): 'D'},
-            'high': {('A','B'): 'Star_0', ('C','D'): 'Star_1', ('B','C'): 'Star_2', ('D','A'): 'Star_3'}
+            (0,1,2,3): 'Star_0',  # (0,1)→A + (2,3)→B → Star_0
+            (0,2,3,1): 'Star_1',  # (0,2)→C + (3,1)→D → Star_1
+            (2,3,0,2): 'Star_2',  # (2,3)→B + (0,2)→C → Star_2
+            (3,1,0,1): 'Star_3'   # (3,1)→D + (0,1)→A → Star_3
         }
 
         self.transfer_high_rules = {
-            'low': {(0,1): 'A', (2,3): 'B', (1,2): 'C', (3,0): 'D'},
-            'high': {('A','B'): 'Star_0', ('C','B'): 'Star_1', ('D','B'): 'Star_2', ('D','A'): 'Star_3'}
+            (0,1,2,3): 'Star_0',  # (0,1)→A + (2,3)→B → Star_0
+            (1,2,2,3): 'Star_1',  # (1,2)→C + (2,3)→B → Star_1
+            (3,0,2,3): 'Star_2',  # (3,0)→D + (2,3)→B → Star_2
+            (3,0,0,1): 'Star_3'   # (3,0)→D + (0,1)→A → Star_3
         }
         self.transfer_rules = self.transfer_low_rules
 
@@ -69,18 +76,11 @@ class StarMakingRules:
         """Convert letter action (U,I,O,P) to numeric (0,1,2,3)"""
         return self.encoding[action.upper()]
 
-    def get_item(self, actions, rule_type='learning'):
-        """Check if action sequence creates an item. Only checks positions [0,1] or [2,3]."""
+    def get_star(self, actions, rule_type='learning'):
+        """Check if 4-action sequence creates a star."""
         rules = self.learning_rules if rule_type == 'learning' else self.transfer_rules
-        if len(actions) >= 2:
-            return rules['low'].get((actions[0], actions[1]))
-        return None
-
-    def get_star(self, items, rule_type='learning'):
-        """Check if item pair creates a star."""
-        rules = self.learning_rules if rule_type == 'learning' else self.transfer_rules
-        if len(items) == 2:
-            return rules['high'].get((items[0], items[1]))
+        if len(actions) == 4:
+            return rules.get(tuple(actions))
         return None
 
 
@@ -206,7 +206,6 @@ You will play {n_trials} trials. Each trial has 4 rounds where you choose an act
 # State
 Each round shows:
 - Goal star: One of Star_0, Star_1, Star_2, Star_3
-- Items: Created items (A, B, C, D or None)
 - Actions: Actions taken so far in this trial
 
 # Your Goal
@@ -221,9 +220,8 @@ O"
 
 def format_state_prompt(state, rules):
     """Format current state as prompt."""
-    items = [item if item else 'None' for item in (state['items'] if state['items'] else [None, None])]
     actions = [rules.encode_action(a) for a in state['actions']]
-    return f"Current state:\nGoal star: {state['goal_star']}.\nItems: [{items[0]}, {items[1]}].\nActions: {actions}."
+    return f"Current state:\nGoal star: {state['goal_star']}.\nActions: {actions}."
 
 
 def format_feedback_prompt(action, state, is_complete, rules, trial_end=False):

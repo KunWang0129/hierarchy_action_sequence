@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Tuple, Union
 from google import genai
+from google.genai import types
 from tqdm import tqdm
 
 
@@ -26,9 +27,10 @@ class BaseLLMClient(ABC):
 
 
 class GeminiClient(BaseLLMClient):
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-2.5-flash", thinking_budget: int = 256):
         self.model = model
         self.client = genai.Client(api_key=api_key)
+        self.thinking_budget = thinking_budget
 
     def create_message(self, messages: List[Dict[str, str]], tools: List = None, schema: Union[str, Dict[str, Any]] = None, kwargs: dict = None) -> Any:
         # Convert messages to the format expected by the new genai client
@@ -49,7 +51,10 @@ class GeminiClient(BaseLLMClient):
         try:
             response = self.client.models.generate_content(
                 model=self.model,
-                contents=combined_content
+                contents=combined_content,
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_budget=self.thinking_budget)
+                )
             )
             return response.text if hasattr(response, "text") else str(response)
         except Exception as e:
@@ -79,18 +84,21 @@ class GeminiClient(BaseLLMClient):
 
     def get_response(self, messages: List[Dict[str, str]], max_new_tokens: int = 1024,
                      temperature: float = 0.7, top_p: float = 0.9, seed: int = None) -> Dict[str, str]:
-        """
-        Generate response matching LocalLLMClient interface for inference pipeline.
-
-        Args:
-            messages: List of message dicts with 'role' and 'content' keys
-            max_new_tokens: Maximum tokens to generate (not used by Gemini API)
-            temperature: Sampling temperature (not used by Gemini API)
-            top_p: Top-p sampling (not used by Gemini API)
-            seed: Random seed (not used by Gemini API)
-
-        Returns:
-            Dict with 'content' key containing the generated text
-        """
+        """Generate response matching LocalLLMClient interface."""
         response_text = self.create_message(messages)
         return {"content": response_text}
+
+    def generate_batch(
+        self,
+        message_batches: List[List[Dict[str, str]]],
+        max_new_tokens: int = 1024,
+        temperature: float = 0.7,
+        top_p: float = 0.9,
+        seed: int = None,
+    ) -> List[Dict[str, str]]:
+        """Generate responses for multiple message batches (sequential for Gemini)."""
+        results = []
+        for messages in tqdm(message_batches, desc="Gemini batch", unit="req"):
+            response_text = self.create_message(messages)
+            results.append({"content": response_text})
+        return results

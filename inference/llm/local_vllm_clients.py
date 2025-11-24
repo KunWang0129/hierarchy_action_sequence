@@ -68,7 +68,7 @@ class LocalVLLMClient:
     def generate(
         self,
         messages: List[Dict[str, str]],
-        max_new_tokens: int = 1024,
+        max_new_tokens: int = 256,
         temperature: float = 0.7,
         top_p: float = 0.9,
         seed: Optional[int] = None,
@@ -93,7 +93,7 @@ class LocalVLLMClient:
     def generate_batch(
         self,
         message_batches: List[List[Dict[str, str]]],
-        max_new_tokens: int = 1024,
+        max_new_tokens: int = 256,
         temperature: float = 0.7,
         top_p: float = 0.9,
         seed: Optional[int] = None,

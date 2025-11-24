@@ -85,7 +85,7 @@ class LocalLLMClient:
     def generate(
         self,
         messages: List[Dict[str, str]],
-        max_new_tokens: int = 1024,
+        max_new_tokens: int = 256,
         temperature: float = 0.7,
         top_p: float = 0.9,
         seed: Optional[int] = None,
@@ -115,7 +115,7 @@ class LocalLLMClient:
     def get_response(
         self,
         messages: List[Dict[str, str]],
-        max_new_tokens: int = 1024,
+        max_new_tokens: int = 256,
         temperature: float = 0.7,
         top_p: float = 0.9,
         seed: Optional[int] = None,
