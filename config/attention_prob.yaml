@@ -1,0 +1,35 @@
+# Attention probability extraction configuration
+# This config is used for replaying specific trials from existing experiments
+# and extracting attention probabilities for analysis
+
+model:
+  family: "qwen3"
+  size: "4b"
+  dtype: "auto"
+  tensor_parallel_size: 1
+
+attention_analysis:
+  # Path to the input experiment JSON file to load existing results
+  input_experiment_path: "results/qwen3-4b/transfer_low/20250101_120000_experiment.json"
+
+  # Number of participants to replay (M participants)
+  num_replay_participants: 5
+
+  # Which trial to replay (null = use transfer_start_trial, or specify integer)
+  replay_trial_index: null
+
+  # Whether to save attention weight matrices as separate numpy files
+  save_attention_weights: true
+
+  # Subdirectory for attention analysis outputs
+  output_subdir: "attention_analysis"
+
+  # Optional: specific participant IDs to analyze (null = random selection)
+  specific_participant_ids: null
+
+  # Whether to replay from both encoding groups or just one (null = both, 1 or 2 = specific)
+  target_encoding: null
+
+output:
+  dir: "results"
+  save_json: true

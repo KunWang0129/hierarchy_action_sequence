@@ -16,7 +16,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from matplotlib.ticker import FuncFormatter, MaxNLocator
+from matplotlib.ticker import FuncFormatter, MaxNLocator, MultipleLocator
 
 
 sns.set_theme(style="whitegrid", context="talk")
@@ -572,7 +572,13 @@ def create_visualizations(participant_df: pd.DataFrame,
 
     # Only create this plot if we have data in both phases
     if len(learning_phase_df) > 0 and len(transfer_phase_df) > 0:
-        fig, (ax_learn, ax_transfer) = plt.subplots(1, 2, figsize=(14, 5))
+        # Scale subplot widths to reflect the number of trials in each phase
+        learning_span = int(learning_phase_df['trial_number'].max() - learning_phase_df['trial_number'].min() + 1)
+        transfer_span = int(transfer_phase_df['trial_number'].max() - transfer_phase_df['trial_number'].min() + 1)
+        fig, (ax_learn, ax_transfer) = plt.subplots(
+            1, 2, figsize=(14, 5),
+            gridspec_kw={'width_ratios': [learning_span, transfer_span]}
+        )
 
         # Common styling
         learning_color = '#2ecc71'  # Green for learning
@@ -592,7 +598,7 @@ def create_visualizations(participant_df: pd.DataFrame,
         ax_learn.set_title(f'Learning Phase (Trials 0-{transfer_start - 1})', fontsize=13, fontweight='bold')
         ax_learn.set_ylim([0, 0.6])
         ax_learn.yaxis.set_major_formatter(percent_formatter)
-        ax_learn.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax_learn.xaxis.set_major_locator(MultipleLocator(10))
         sns.despine(ax=ax_learn)
 
         # Add mean line and stats for learning phase
@@ -617,7 +623,7 @@ def create_visualizations(participant_df: pd.DataFrame,
         ax_transfer.set_title(f'Transfer Phase (Trials {transfer_start}-{max_trial})', fontsize=13, fontweight='bold')
         ax_transfer.set_ylim([0, 0.6])
         ax_transfer.yaxis.set_major_formatter(percent_formatter)
-        ax_transfer.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax_transfer.xaxis.set_major_locator(MultipleLocator(10))
         sns.despine(ax=ax_transfer)
 
         # Add mean line and stats for transfer phase

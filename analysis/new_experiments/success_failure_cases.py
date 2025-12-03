@@ -28,6 +28,7 @@ from analysis.functions import (
     _create_summary_dataframe,
     _flatten_blocks,
     parse_action_sequence,
+    parse_goal_stars,
     parse_trial_correctness,
     setup_plot_style,
 )
@@ -132,6 +133,341 @@ def count_2seq_incorrect_trials(
                 "transfer_type": transfer_type,
                 "phase": phase,
             })
+    return rows
+
+
+# ============================================================================
+# Experiment 4: Valid Pair Proportion in OLD Sequences
+# ============================================================================
+
+def build_learning_memory_for_participants(
+    learning_sequences: dict[int, list[list[list[int]]]],
+    learning_correctness: dict[int, list[list[bool]]],
+    learning_goals: dict[int, list[list[str | None]]],
+    participant_ids: set[int],
+) -> dict[int, dict]:
+    """Build learning memory for specified participants only.
+
+    Captures rewarded 4-key sequences per star for each participant in the set.
+
+    Args:
+        learning_sequences: All learning sequences per participant
+        learning_correctness: All learning correctness per participant
+        learning_goals: All learning goals per participant
+        participant_ids: Set of participant IDs to include
+
+    Returns:
+        Dict mapping participant_id to their learning memory:
+        {
+            participant_id: {
+                "per_star": {star: set of 4-key tuples},
+                "all_sequences": set of all 4-key tuples
+            }
+        }
+    """
+    memory: dict = {}
+
+    for participant_id in participant_ids:
+        if participant_id not in learning_sequences:
+            continue
+
+        seq_blocks = learning_sequences[participant_id]
+        seqs = _flatten_blocks(seq_blocks)
+        correctness = _flatten_blocks(learning_correctness.get(participant_id, []))
+        goals = _flatten_blocks(learning_goals.get(participant_id, []))
+
+        if not seqs or not correctness or not goals:
+            LOG.debug(
+                "Skipping participant %s due to missing learning data (seq:%s cor:%s goals:%s)",
+                participant_id, len(seqs), len(correctness), len(goals),
+            )
+            continue
+
+        n = min(len(seqs), len(correctness), len(goals))
+        per_star: dict[str, set[tuple[int, ...]]] = defaultdict(set)
+        all_sequences: set[tuple[int, ...]] = set()
+
+        for idx in range(n):
+            if not correctness[idx]:
+                continue
+            seq = seqs[idx]
+            if len(seq) < 4:
+                continue
+            seq_tuple = tuple(seq[:4])
+            star = goals[idx] or "Unknown"
+            per_star[star].add(seq_tuple)
+            all_sequences.add(seq_tuple)
+
+        if per_star:
+            memory[participant_id] = {"per_star": per_star, "all_sequences": all_sequences}
+
+    LOG.info("Built learning memory for %s participants", len(memory))
+    return memory
+
+
+def calculate_valid_pair_proportion_for_groups(
+    transfer_sequences: dict[int, list[list[list[int]]]],
+    transfer_goals: dict[int, list[list[str | None]]],
+    learning_memory: dict[int, dict],
+    participant_group: dict[int, str],
+    valid_pairs: set[tuple[int, int]],
+    max_trials: int = 40,
+) -> list[dict]:
+    """Calculate per-trial proportion of valid pairs in OLD sequences by group.
+
+    For each trial, computes the percentage of valid 2-key pairs that appear
+    within 4-key sequences identical to rewarded sequences from learning.
+    Trials with no valid pairs are excluded from the output.
+
+    Args:
+        transfer_sequences: Transfer phase sequences
+        transfer_goals: Transfer phase goals
+        learning_memory: Learning memory built by build_learning_memory_for_participants
+        participant_group: Dict mapping participant_id -> "high" or "low"
+        valid_pairs: Set of valid 2-key pairs
+        max_trials: Maximum number of transfer trials to analyze
+
+    Returns:
+        List of row dicts with:
+        - participant_id
+        - group ("high" or "low")
+        - trial_index
+        - total_valid_pairs (count of valid pairs in this trial)
+        - valid_pairs_in_old (count of valid pairs within OLD sequences)
+        - percentage_in_old (percentage)
+    """
+    rows: list[dict] = []
+
+    for participant_id, group in participant_group.items():
+        if participant_id not in transfer_sequences:
+            continue
+
+        seq_blocks = transfer_sequences[participant_id]
+        seqs = _flatten_blocks(seq_blocks)
+        goals_blocks = transfer_goals.get(participant_id, [])
+        goals = _flatten_blocks(goals_blocks)
+
+        if not seqs:
+            continue
+
+        limit = min(len(seqs), max_trials)
+        memo = learning_memory.get(participant_id, {"per_star": {}, "all_sequences": set()})
+        all_sequences = memo.get("all_sequences", set())
+
+        for idx in range(limit):
+            seq = seqs[idx]
+            if len(seq) < 4:
+                continue
+
+            seq_tuple = tuple(seq[:4])
+            is_old = seq_tuple in all_sequences
+
+            # Extract 2-key pairs and count valid ones
+            pairs = [(seq[0], seq[1]), (seq[2], seq[3])]
+            valid_count = sum(1 for pair in pairs if pair in valid_pairs)
+
+            # Skip trials with no valid pairs (exclude from calculation)
+            if valid_count == 0:
+                continue
+
+            # Count valid pairs that are in OLD sequences
+            valid_in_old = valid_count if is_old else 0
+
+            # Calculate percentage
+            percentage = (valid_in_old / valid_count) * 100.0
+
+            rows.append({
+                "participant_id": participant_id,
+                "group": group,
+                "trial_index": idx + 1,
+                "total_valid_pairs": valid_count,
+                "valid_pairs_in_old": valid_in_old,
+                "percentage_in_old": percentage,
+            })
+
+    LOG.info(
+        "Computed proportion of valid pairs in OLD sequences for %s trials",
+        len(rows),
+    )
+    return rows
+
+
+def plot_valid_pair_proportion_by_group(
+    rows: Sequence[dict],
+    max_trials: int = 40,
+    save_path: Path | None = None,
+    show: bool = False,
+):
+    """Plot proportion of valid pairs in OLD sequences by success group.
+
+    Creates a line plot with:
+    - X-axis: Transfer trial index
+    - Y-axis: % of valid pairs in OLD sequences
+    - Two lines: High-Success vs Low-Success groups
+    - Error bars showing SEM
+    """
+    # Filter to max_trials
+    filtered_rows = [r for r in rows if r["trial_index"] <= max_trials]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    for group, label, color in [("high", "High-Success", "#2a9d8f"), ("low", "Low-Success", "#e63946")]:
+        trials, means, sems = _aggregate_by_trial_group(
+            filtered_rows, group, key="percentage_in_old", max_trial_index=max_trials
+        )
+        if trials:
+            ax.errorbar(trials, means, yerr=sems, fmt="o-", color=color,
+                        label=label, markersize=PLOT_STYLE["markersize"],
+                        linewidth=PLOT_STYLE["linewidth"],
+                        capsize=PLOT_STYLE["capsize"], alpha=0.8)
+
+    ax.set_xlabel("Transfer Trial Index")
+    ax.set_ylabel("% of Valid Pairs in OLD Sequences")
+    ax.set_title("Transfer Phase: Valid Pair Reuse from OLD Sequences by Learning Success")
+    ax.set_ylim(-5, 105)
+    ax.legend(frameon=False)
+    plt.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path, bbox_inches="tight", dpi=200)
+        LOG.info("Saved plot to %s", save_path)
+    if show:
+        plt.show()
+    plt.close(fig)
+
+
+def fit_valid_pair_proportion_regression(rows: Sequence[dict]):
+    """Fit model: percentage_in_old ~ group + trial + group:trial + (1|participant).
+
+    Tests:
+    - Main effect of group (do high-success participants have higher proportion?)
+    - Trial effect (does proportion change over time?)
+    - Group x Trial interaction (do groups show different trajectories?)
+
+    Returns:
+        (result, summary_dataframe)
+    """
+    import pandas as pd
+    import statsmodels.formula.api as smf
+
+    data_rows = [dict(r) for r in rows]
+    if not data_rows:
+        raise ValueError("No data provided for regression")
+
+    mean_trial = mean(r["trial_index"] for r in data_rows)
+    for r in data_rows:
+        r["trial_centered"] = r["trial_index"] - mean_trial
+        r["group_num"] = 1 if r["group"] == "high" else 0
+
+    df = pd.DataFrame(data_rows)
+    formula = "percentage_in_old ~ group_num + trial_centered + group_num:trial_centered"
+
+    # Try mixed model
+    try:
+        model = smf.mixedlm(formula, data=df, groups=df["participant_id"], re_formula="1")
+        result = model.fit(reml=False, method="lbfgs", disp=False)
+        return result, _create_summary_dataframe(result)
+    except Exception as e:
+        LOG.warning("Mixed model failed (%s); using clustered OLS", e)
+
+    model = smf.ols(formula, data=df)
+    result = model.fit(cov_type="cluster", cov_kwds={"groups": df["participant_id"]})
+    return result, _create_summary_dataframe(result)
+
+
+def run_valid_pair_proportion_analysis(
+    seqs: dict[str, dict[int, list[list[list[int]]]]],
+    corr: dict[str, dict[int, list[list[bool]]]],
+    goals: dict[str, dict[int, list[list[str | None]]]],
+    condition_label: str,
+    top_n: int,
+    output_dir: Path,
+    show: bool = False,
+) -> list[dict]:
+    """Run Experiment 4: Valid pair proportion in OLD sequences by learning success.
+
+    Steps:
+    1. Select top/bottom participants by LEARNING phase success
+    2. Build learning memory for these participants
+    3. Calculate valid pair proportions in transfer phase
+    4. Plot comparison
+    5. Run regression analysis
+
+    Args:
+        seqs: Parsed action sequences dict with 'learning_trials' and 'transfer_trials'
+        corr: Parsed correctness dict with 'learning_trials' and 'transfer_trials'
+        goals: Parsed goals dict with 'learning_trials' and 'transfer_trials'
+        condition_label: Label for the experimental condition (e.g., 'high', 'low')
+        top_n: Number of top/bottom participants
+        output_dir: Directory for saving plots
+        show: Whether to display plots interactively
+
+    Returns:
+        List of row dicts for analysis
+    """
+    # Select participants by learning phase success
+    rates, top_pids, bottom_pids = select_by_phase_success(
+        corr["learning_trials"], corr["transfer_trials"],
+        phase="learning", top_n=top_n
+    )
+
+    LOG.info("Exp 4: Selecting by learning phase success")
+    LOG.info("  Top %d (rates): %s", top_n,
+             {p: f"{rates[p]:.2f}" for p in sorted(top_pids)})
+    LOG.info("  Bottom %d (rates): %s", top_n,
+             {p: f"{rates[p]:.2f}" for p in sorted(bottom_pids)})
+
+    # Create participant group mapping
+    participant_group = {}
+    for pid in top_pids:
+        participant_group[pid] = "high"
+    for pid in bottom_pids:
+        participant_group[pid] = "low"
+
+    # Build learning memory for these participants
+    all_participant_ids = top_pids | bottom_pids
+    learning_memory = build_learning_memory_for_participants(
+        seqs["learning_trials"],
+        corr["learning_trials"],
+        goals["learning_trials"],
+        all_participant_ids
+    )
+
+    # Get valid pairs from rules
+    rules = StarMakingRules()
+    valid_pairs = set(rules.learning_rules["low"].keys())
+
+    # Calculate proportions in transfer phase
+    rows = calculate_valid_pair_proportion_for_groups(
+        seqs["transfer_trials"],
+        goals["transfer_trials"],
+        learning_memory,
+        participant_group,
+        valid_pairs,
+        max_trials=40
+    )
+
+    LOG.info("  Transfer phase: %d rows with valid pairs", len(rows))
+
+    # Generate plot
+    prefix = f"exp4_{condition_label}_learning_groups"
+    plot_valid_pair_proportion_by_group(
+        rows,
+        max_trials=40,
+        save_path=output_dir / f"{prefix}_valid_pair_proportion.png",
+        show=show
+    )
+
+    # Fit regression model
+    LOG.info("=" * 60)
+    LOG.info("Exp 4 MODEL: Valid Pair Proportion (selected by learning success)")
+    LOG.info("=" * 60)
+    try:
+        _, summary = fit_valid_pair_proportion_regression(rows)
+        LOG.info("\n%s", summary.to_string(index=False))
+    except Exception as e:
+        LOG.warning("Model failed: %s", e)
+
     return rows
 
 
@@ -615,6 +951,7 @@ def main():
     for cond, participants in data.items():
         seqs = parse_action_sequence(participants)
         corr = parse_trial_correctness(participants)
+        goals = parse_goal_stars(participants)
 
         # Experiment 1: Select by LEARNING phase success
         LOG.info("\n" + "-" * 60)
@@ -649,6 +986,18 @@ def main():
         run_learning_transfer_correlation_analysis(
             corr,
             condition_label=cond,
+            output_dir=args.output_dir,
+            show=args.show
+        )
+
+        # Experiment 4: Valid Pair Proportion in OLD Sequences by Learning Success
+        LOG.info("\n" + "-" * 60)
+        LOG.info("EXPERIMENT 4: %s condition - Valid Pair Proportion in OLD Sequences", cond.upper())
+        LOG.info("-" * 60)
+        run_valid_pair_proportion_analysis(
+            seqs, corr, goals,
+            condition_label=cond,
+            top_n=args.top_n,
             output_dir=args.output_dir,
             show=args.show
         )

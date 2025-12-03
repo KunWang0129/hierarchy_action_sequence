@@ -18,11 +18,15 @@ MODEL_REGISTRY: Dict[Tuple[str, str], str] = {
     ("llama3.1", "70b"): "meta-llama/Llama-3.1-70B-Instruct",
     ("llama3.1", "8b"): "meta-llama/Llama-3.1-8B-Instruct",
     # Qwen models
-    ("qwen3", "30b"): "Qwen/Qwen3-30B-A3B-Thinking-2507",
+    ("qwen3", "235b"): "Qwen/Qwen3-235B-A22B-Thinking-2507-FP8",
+    ("qwen3", "32b"): "Qwen/Qwen3-32B",
     ("qwen3", "8b"): "Qwen/Qwen3-8B",
     ("qwen3", "4b"): "Qwen/Qwen3-4B",
     ("qwen3", "1.7b"): "Qwen/Qwen3-1.7B",
     ("qwen3", "0.6b"): "Qwen/Qwen3-0.6B",
+    # DeepSeek R1 models
+    ("deepseek-r1", "70b"): "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+    ("deepseek-r1", "32b"): "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
     # GPT-OSS models
     ("gpt-oss", "120b"): "openai/gpt-oss-120b",
     ("gpt-oss", "20b"): "openai/gpt-oss-20b",

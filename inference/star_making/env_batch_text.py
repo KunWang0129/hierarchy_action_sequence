@@ -2,6 +2,8 @@ from tqdm import tqdm
 from .env_text import StarMakingSimulator
 from .assets_utils import (
     get_system_prompt,
+    get_transfer_notification_prompt,
+    get_transfer_trial_reminder,
     format_state_prompt,
     format_feedback_prompt,
     parse_action,
@@ -13,11 +15,12 @@ from .assets_utils import (
 class StarMakingEnvBatchText:
     """Batched text-based environment for star making with LLM interaction."""
 
-    def __init__(self, llm_client, rules, n_agents, rule_type='learning'):
+    def __init__(self, llm_client, rules, n_agents, rule_type='learning', notify_transfer=False):
         self.llm_client = llm_client
         self.rules = rules
         self.n_agents = n_agents
         self.rule_type = rule_type
+        self.notify_transfer = notify_transfer
         self.simulators = [StarMakingSimulator(rules, rule_type) for _ in range(n_agents)]
         self.conversation_managers = [ConversationHistoryManager() for _ in range(n_agents)]
 
@@ -112,6 +115,7 @@ class StarMakingEnvBatchText:
         active_rule = rule_type or self.rule_type
         for simulator in self.simulators:
             simulator.rule_type = active_rule
+        transfer_reminder = get_transfer_trial_reminder() if (active_rule == "transfer" and self.notify_transfer) else None
 
         # Reset all simulators
         for i, goal_star in enumerate(goal_stars):
@@ -120,7 +124,7 @@ class StarMakingEnvBatchText:
         # Initial state prompts for all agents
         for i in range(self.n_agents):
             state = self.simulators[i].get_state()
-            prompt = format_state_prompt(state, self.rules)
+            prompt = format_state_prompt(state, self.rules, transfer_reminder=transfer_reminder)
             self.conversation_managers[i].add_message("user", prompt)
             self.conversation_managers[i].set_awaiting_action(True)
 
@@ -143,7 +147,7 @@ class StarMakingEnvBatchText:
         # Check success for all agents
         return [sim.is_complete() for sim in self.simulators]
 
-    def run_experiment_batch(self, n_trials=20, goal_stars_per_agent=None, specify_star=None, rule_schedule=None):
+    def run_experiment_batch(self, n_trials=20, goal_stars_per_agent=None, specify_star=None, rule_schedule=None, transfer_start_trial=None):
         """Run full experiment for all agents in batch mode.
 
         Args:
@@ -152,6 +156,7 @@ class StarMakingEnvBatchText:
                                  Shape: [n_agents][n_trials]
             specify_star: Optional star to use for all agents and all trials
             rule_schedule: Optional list of rule types per trial
+            transfer_start_trial: Optional trial index where transfer phase begins
 
         Returns:
             Dict with results for each agent
@@ -176,6 +181,14 @@ class StarMakingEnvBatchText:
 
         # Run trials
         for trial in tqdm(range(n_trials), desc="Running trials (batched)"):
+            # Inject notification at transition point
+            if self.notify_transfer and trial == transfer_start_trial:
+                notification = get_transfer_notification_prompt()
+                for agent_idx in range(self.n_agents):
+                    self.conversation_managers[agent_idx].add_message("user", notification)
+
+            current_rule_type = rule_schedule[trial] if rule_schedule else self.rule_type
+
             # Determine goal stars for each agent
             goal_stars = []
             for agent_idx in range(self.n_agents):
@@ -186,8 +199,6 @@ class StarMakingEnvBatchText:
                 else:
                     goal_star = f"Star_{(trial // (n_trials // 8)) % 4}"
                 goal_stars.append(goal_star)
-
-            current_rule_type = rule_schedule[trial] if rule_schedule else self.rule_type
 
             # Run trial for all agents
             successes = self.run_trial_batch(goal_stars, rule_type=current_rule_type)

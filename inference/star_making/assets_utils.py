@@ -33,7 +33,7 @@ LEARNING_ORDERS = [
 class StarMakingRules:
     """Stores and manages star making rules for learning and transfer conditions."""
 
-    def __init__(self, encoding=1):
+    def __init__(self, encoding=1, generalize=False):
         self.encoding = ACTION_ENCODE_1 if encoding == 1 else ACTION_ENCODE_2
         self.learning_rules = {
             'low': {(0,1): 'A', (2,3): 'B', (1,2): 'C', (3,0): 'D'},
@@ -49,6 +49,21 @@ class StarMakingRules:
             'high': {('A','B'): 'Star_0', ('C','B'): 'Star_1', ('D','B'): 'Star_2', ('D','A'): 'Star_3'}
         }
         self.transfer_rules = self.transfer_low_rules
+
+        self.generalize_low_rules = {
+            'low': {(0,1): 'A', (2,3): 'B', (0,2): 'C', (3,1): 'D'},
+            'high': {('A','B'): 'Star_0', ('C','D'): 'Star_4', ('B','C'): 'Star_5', ('D','A'): 'Star_3'}
+        }
+
+        self.generalize_high_rules = {
+            'low': {(0,1): 'A', (2,3): 'B', (1,2): 'C', (3,0): 'D'},
+            'high': {('A','B'): 'Star_0', ('C','B'): 'Star_4', ('D','B'): 'Star_5', ('D','A'): 'Star_3'}
+        }
+
+        if generalize:
+            self.transfer_low_rules = self.generalize_low_rules
+            self.transfer_high_rules = self.generalize_high_rules
+
 
     def set_transfer_rule_type(self, rule_type):
         """Choose which transfer rule table to use."""
@@ -196,6 +211,7 @@ class ConversationHistoryManager:
 
 
 # Prompt formatting functions
+# Previously "- Goal star: One of Star_0, Star_1, Star_2, Star_3"
 def get_system_prompt(n_trials):
     """Generate system prompt with specified number of trials."""
     return f"""You are an expert agent in a star making game.
@@ -205,7 +221,7 @@ You will play {n_trials} trials. Each trial has 4 rounds where you choose an act
 
 # State
 Each round shows:
-- Goal star: One of Star_0, Star_1, Star_2, Star_3
+- Goal star: Star_i
 - Items: Created items (A, B, C, D or None)
 - Actions: Actions taken so far in this trial
 
@@ -219,11 +235,22 @@ O"
 """
 
 
-def format_state_prompt(state, rules):
+def get_transfer_notification_prompt():
+    """Generate notification message for when transfer phase begins."""
+    return """TRANSFER REMINDER: Prior rules may now be wrong. Treat this like a new game and quickly explore new hypotheses. Example: Star_0 might now be buildable from a different item pair (e.g. [C, B] instead of [A,B])."""
+
+
+def get_transfer_trial_reminder():
+    """Generate reminder message shown at the start of each transfer trial."""
+    return "rules to make Star are now changed"
+
+
+def format_state_prompt(state, rules, transfer_reminder=None):
     """Format current state as prompt."""
     items = [item if item else 'None' for item in (state['items'] if state['items'] else [None, None])]
     actions = [rules.encode_action(a) for a in state['actions']]
-    return f"Current state:\nGoal star: {state['goal_star']}.\nItems: [{items[0]}, {items[1]}].\nActions: {actions}."
+    reminder = f"Transfer reminder: {transfer_reminder}\n" if transfer_reminder else ""
+    return f"{reminder}Current state:\nGoal star: {state['goal_star']}.\nItems: [{items[0]}, {items[1]}].\nActions: {actions}."
 
 
 def format_feedback_prompt(action, state, is_complete, rules, trial_end=False):

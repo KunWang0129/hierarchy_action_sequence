@@ -1,5 +1,10 @@
 """Transfer-phase analysis of 4-key reuse and 2-key chunk preference.
 
+Includes three experiments:
+1. OLD vs NEW sequence reuse probability
+2. Valid vs invalid 2-key pair usage
+3. Proportion of valid 2-key pairs within OLD sequences (learned 4-key sequences)
+
 Usage example:
 
 python analysis/new_experiments/sequence_item_transfer_usage.py \
@@ -213,6 +218,71 @@ def count_two_key_usage(
     return rows
 
 
+def calculate_valid_pair_proportion_by_trial(
+    transfer_sequences: dict,
+    transfer_goals: dict,
+    learning_memory: dict,
+    condition_label: str,
+    valid_pairs: set[tuple[int, int]],
+    max_trials: int | None,
+) -> list[dict]:
+    """Calculate per-trial proportion of valid 2-key pairs within OLD sequences.
+
+    For each trial, computes the percentage of valid 2-key pairs that appear
+    within 4-key sequences identical to rewarded sequences from learning.
+    Trials with no valid pairs are excluded from the output.
+    """
+    rows: list[dict] = []
+
+    for participant_id, seq_blocks in transfer_sequences.items():
+        seqs = _flatten_blocks(seq_blocks)
+        goals = _flatten_blocks(transfer_goals.get(participant_id, []))
+        if not seqs:
+            continue
+
+        limit = min(len(seqs), max_trials) if max_trials else len(seqs)
+        memo = learning_memory.get(participant_id, {"per_star": {}, "all_sequences": set()})
+        all_sequences = memo.get("all_sequences", set())
+
+        for idx in range(limit):
+            seq = seqs[idx]
+            if len(seq) < 4:
+                continue
+
+            seq_tuple = tuple(seq[:4])
+            is_old = seq_tuple in all_sequences
+
+            # Extract 2-key pairs and count valid ones
+            pairs = [(seq[0], seq[1]), (seq[2], seq[3])]
+            valid_count = sum(1 for pair in pairs if pair in valid_pairs)
+
+            # Skip trials with no valid pairs (exclude from calculation)
+            if valid_count == 0:
+                continue
+
+            # Count valid pairs that are in OLD sequences
+            valid_in_old = valid_count if is_old else 0
+
+            # Calculate percentage
+            percentage = (valid_in_old / valid_count) * 100.0
+
+            rows.append({
+                "participant_id": participant_id,
+                "trial_index": idx + 1,
+                "condition": condition_label,
+                "total_valid_pairs": valid_count,
+                "valid_pairs_in_old": valid_in_old,
+                "percentage_in_old": percentage,
+            })
+
+    LOG.info(
+        "Computed proportion of valid pairs in OLD sequences for %s trials in %s",
+        len(rows),
+        condition_label,
+    )
+    return rows
+
+
 def _summarize_trial_map(trial_map: dict[int, list[float]]) -> tuple[list[int], list[float], list[float]]:
     indices = sorted(trial_map.keys())
     means, sems = [], []
@@ -359,6 +429,59 @@ def plot_two_key_usage(
     plt.close(fig)
 
 
+def plot_two_key_by_novelty(
+    rows: Sequence[dict],
+    max_trials: int | None,
+    save_path: Path,
+    show: bool,
+) -> None:
+    """Plot percentage of valid 2-key pairs within OLD sequences across conditions.
+
+    Shows what proportion of valid pairs appear within 4-key sequences that
+    are identical to rewarded sequences from the learning phase.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+
+    for ax, condition, title in zip(
+        axes,
+        ["transfer_high", "transfer_low"],
+        ["Transfer High", "Transfer Low"],
+    ):
+        trials, means, sems = compute_condition_curve(
+            rows,
+            condition,
+            lambda r: float(r["percentage_in_old"]),
+            max_trials,
+        )
+
+        if not trials:
+            ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+        else:
+            ax.errorbar(
+                trials, means, yerr=sems,
+                fmt="o-",
+                color=PLOT_COLORS["high"],
+                linewidth=PLOT_STYLE["linewidth"],
+                markersize=PLOT_STYLE["markersize"],
+                capsize=PLOT_STYLE["capsize"],
+                label="% in OLD sequences",
+            )
+
+        ax.set_xlabel("Transfer trial")
+        ax.set_title(title)
+        ax.set_ylim(-5, 105)
+
+    axes[0].set_ylabel("% of valid pairs in OLD sequences")
+    axes[0].legend(frameon=False)
+    fig.suptitle("Proportion of valid 2-key pairs within OLD sequences (Experiment 3)", y=1.02)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    LOG.info("Saved proportion-based valid pair plot to %s", save_path)
+    if show:
+        plt.show()
+    plt.close(fig)
+
+
 def _fit_mixed_with_fallback(
     rows: Sequence[dict],
     dv: str,
@@ -418,8 +541,33 @@ def fit_two_key_regression(rows: Sequence[dict], condition: str):
     return _fit_mixed_with_fallback(filtered, "count", terms)
 
 
+def fit_novelty_two_key_regression(rows: Sequence[dict], condition: str):
+    """Fit Trial mixed model for percentage of valid pairs in OLD sequences (Experiment 3).
+
+    Tests whether the percentage of valid pairs within OLD sequences
+    changes over transfer trials.
+    """
+    filtered = [dict(row) for row in rows if row.get("condition") == condition]
+    if not filtered:
+        raise ValueError(f"No proportion data available for {condition}")
+
+    mean_trial = mean(row["trial_index"] for row in filtered)
+    for row in filtered:
+        row["trial_centered"] = row["trial_index"] - mean_trial
+        row["percentage_in_old"] = float(row["percentage_in_old"])
+
+    # Model: percentage_in_old ~ trial_centered + (1|participant)
+    terms = ["trial_centered"]  # Test time trend in proportion
+    return _fit_mixed_with_fallback(filtered, "percentage_in_old", terms)
+
+
 def run_experiments(args: argparse.Namespace) -> None:
-    """Main orchestration for both experiments."""
+    """Main orchestration for all three experiments.
+
+    Experiment 1: OLD vs NEW sequence reuse
+    Experiment 2: Valid vs invalid 2-key usage
+    Experiment 3: Proportion of valid 2-key pairs within OLD sequences
+    """
     participants_high = load_participants(args.transfer_high)
     participants_low = load_participants(args.transfer_low)
 
@@ -509,6 +657,40 @@ def run_experiments(args: argparse.Namespace) -> None:
         LOG.info("Experiment 2 (transfer_low) coefficients:\n%s", two_key_summary_low.to_string(index=False))
     else:
         LOG.warning("No transfer_low rows available for Experiment 2 regression; skipping.")
+
+    # Experiment 3: Proportion of valid 2-key pairs in OLD sequences
+    exp3_rows_high = calculate_valid_pair_proportion_by_trial(
+        parsed_high["transfer_sequences"],
+        parsed_high["transfer_goals"],
+        learning_memory_high,
+        "transfer_high",
+        valid_pairs,
+        args.max_transfer_trials,
+    )
+    exp3_rows_low = calculate_valid_pair_proportion_by_trial(
+        parsed_low["transfer_sequences"],
+        parsed_low["transfer_goals"],
+        learning_memory_low,
+        "transfer_low",
+        valid_pairs,
+        args.max_transfer_trials,
+    )
+    all_exp3_rows = exp3_rows_high + exp3_rows_low
+
+    exp3_path = output_dir / f"novelty_two_key_usage_{high_tag}_{low_tag}.png"
+    plot_two_key_by_novelty(all_exp3_rows, args.max_transfer_trials, exp3_path, args.show_plots)
+
+    if exp3_rows_high:
+        _, exp3_summary_high = fit_novelty_two_key_regression(exp3_rows_high, "transfer_high")
+        LOG.info("Experiment 3 (transfer_high) coefficients:\n%s", exp3_summary_high.to_string(index=False))
+    else:
+        LOG.warning("No transfer_high rows available for Experiment 3 regression; skipping.")
+
+    if exp3_rows_low:
+        _, exp3_summary_low = fit_novelty_two_key_regression(exp3_rows_low, "transfer_low")
+        LOG.info("Experiment 3 (transfer_low) coefficients:\n%s", exp3_summary_low.to_string(index=False))
+    else:
+        LOG.warning("No transfer_low rows available for Experiment 3 regression; skipping.")
 
     LOG.info(
         "Completed analyses. Figures saved to %s. Consider archiving model summaries separately if needed.",

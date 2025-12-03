@@ -11,6 +11,7 @@ experiment:
   n_trials: 80
   n_agents: 4
   transfer_rule_type: "transfer_low"  # Options: transfer_low, transfer_high
+  notify_transfer: false  # If true, explicitly notify agent when transfer phase begins
 
 output:
   dir: "results"

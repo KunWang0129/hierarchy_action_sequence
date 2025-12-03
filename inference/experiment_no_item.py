@@ -215,7 +215,7 @@ def main(cfg: DictConfig) -> None:
         output_dir = Path(cfg.output.dir) / model_name / cfg.experiment.transfer_rule_type
         output_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = output_dir / f"{timestamp}_experiment.json"
+        output_path = output_dir / f"no_item_{timestamp}_experiment.json"
         with open(output_path, "w") as f:
             json.dump(output, f, indent=2)
         logger.info(f"Results saved to: {output_path}")

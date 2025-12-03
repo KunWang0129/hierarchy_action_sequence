@@ -50,7 +50,7 @@ def _build_goal_and_rule_schedule(n_trials: int) -> tuple[list[str], list[str], 
     block_size = n_trials // 12
     if n_trials % 12 != 0:
         logger.warning("n_trials is not divisible by 12; using block size %s per requirements", max(1, block_size))
-    transfer_labels = ["Star_1" if i % 2 == 0 else "Star_2" for i in range(4)]
+    transfer_labels = ["Star_4" if i % 2 == 0 else "Star_5" for i in range(4)]
 
     learning_goals = _assign_block_goals(learning_trials, block_size, LEARNING_ORDERS)
     transfer_goals = _assign_block_goals(transfer_trials, block_size, transfer_labels)
@@ -78,7 +78,7 @@ def _run_encoding_group(
     if not participant_ids:
         return []
 
-    rules = StarMakingRules(encoding=encoding_label)
+    rules = StarMakingRules(encoding=encoding_label, generalize=True)
     rules.set_transfer_rule_type(cfg.experiment.transfer_rule_type)
 
     n_trials = cfg.experiment.n_trials
@@ -225,10 +225,10 @@ def main(cfg: DictConfig) -> None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         if cfg.experiment.get("notify_transfer", False):
-            output_path = output_dir / f"notify_transfer_{timestamp}_experiment.json"
+            output_path = output_dir / f"generalize_notify_transfer_{timestamp}_experiment.json"
         else:
-            output_path = output_dir / f"{timestamp}_experiment.json"
-            
+            output_path = output_dir / f"generalize_{timestamp}_experiment.json"
+
         with open(output_path, "w") as f:
             json.dump(output, f, indent=2)
         logger.info(f"Results saved to: {output_path}")

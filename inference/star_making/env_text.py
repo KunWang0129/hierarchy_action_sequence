@@ -19,6 +19,8 @@ StarMakingEnvText:
 from tqdm import tqdm
 from .assets_utils import (
     get_system_prompt,
+    get_transfer_notification_prompt,
+    get_transfer_trial_reminder,
     format_state_prompt,
     format_feedback_prompt,
     parse_action,
@@ -76,10 +78,11 @@ class StarMakingSimulator:
 class StarMakingEnvText:
     """Text-based environment for star making with LLM interaction."""
 
-    def __init__(self, llm_client, rules, rule_type='learning'):
+    def __init__(self, llm_client, rules, rule_type='learning', notify_transfer=False):
         self.llm_client = llm_client
         self.simulator = StarMakingSimulator(rules, rule_type)
         self.conversation_manager = ConversationHistoryManager()
+        self.notify_transfer = notify_transfer
 
     def _prepare_conversation_for_llm(self):
         """Append action instruction to latest user message without mutating history."""
@@ -126,7 +129,8 @@ class StarMakingEnvText:
 
         # Initial state prompt
         state = self.simulator.get_state()
-        user_prompt = format_state_prompt(state, self.simulator.rules)
+        transfer_reminder = get_transfer_trial_reminder() if (self.simulator.rule_type == "transfer" and self.notify_transfer) else None
+        user_prompt = format_state_prompt(state, self.simulator.rules, transfer_reminder=transfer_reminder)
         self.conversation_manager.add_message("user", user_prompt)
         self.conversation_manager.set_awaiting_action(True)
 
@@ -144,7 +148,7 @@ class StarMakingEnvText:
 
         return self.simulator.is_complete()
 
-    def run_experiment(self, n_trials=20, goal_stars=None, specify_star=None):
+    def run_experiment(self, n_trials=20, goal_stars=None, specify_star=None, rule_schedule=None, transfer_start_trial=None):
         """Run multiple trials.
 
         Args:
@@ -152,15 +156,34 @@ class StarMakingEnvText:
             goal_stars: Optional list of goal stars for each trial (overrides other options)
             specify_star: Optional star to use for all trials (e.g., "Star_0").
                          If None, trials are split evenly across Star_0, Star_1, Star_2, Star_3
+            rule_schedule: Optional list of rule types per trial
+            transfer_start_trial: Optional trial index where transfer phase begins
         """
+        if rule_schedule and len(rule_schedule) != n_trials:
+            raise ValueError("rule_schedule length must match n_trials")
+
         # Initialize conversation history - use in-context for transfer, standard prompt for learning
-        if self.simulator.rule_type == 'transfer':
+        if rule_schedule:
+            should_use_transfer_prompt = all(rule == 'transfer' for rule in rule_schedule)
+        else:
+            should_use_transfer_prompt = (self.simulator.rule_type == 'transfer')
+
+        if should_use_transfer_prompt:
             self.conversation_manager.initialize_with_in_context(n_trials)
         else:
             self.conversation_manager.initialize(get_system_prompt(n_trials))
 
         results = []
         for trial in tqdm(range(n_trials), desc="Running trials"):
+            # Inject notification at transition point
+            if self.notify_transfer and trial == transfer_start_trial:
+                notification = get_transfer_notification_prompt()
+                self.conversation_manager.add_message("user", notification)
+
+            # Update simulator rule type if needed
+            if rule_schedule:
+                self.simulator.rule_type = rule_schedule[trial]
+
             # Determine goal star:
             # 1. Use goal_stars list if provided
             # 2. Else use specify_star if provided
