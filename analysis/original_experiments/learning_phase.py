@@ -232,31 +232,51 @@ def plot_valid_invalid_counts(
     trial_indices = sorted(set(counts["valid"]) | set(counts["invalid"]))
     stats = {label: _compute_trial_statistics(bucket, trial_indices) for label, bucket in counts.items()}
 
+    # Colors matching human experiment plot
+    colors = {"valid": "#5fcbd6", "invalid": "#d65f5f"}
+
     if ax is None:
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(5, 5), dpi=100)
         tight_layout = True
     else:
         fig = ax.figure
         tight_layout = False
 
-    for label in ["valid", "invalid"]:
+    for label in ["invalid", "valid"]:
         means, sems = stats[label]
         if not trial_indices:
             continue
-        lower = [max(m - s, 0) for m, s in zip(means, sems)]
-        upper = [m + s for m, s in zip(means, sems)]
-        ax.fill_between(trial_indices, lower, upper, color=PLOT_COLORS[label],
-                        alpha=PLOT_STYLE["fill_alpha"], linewidth=0)
         ax.errorbar(trial_indices, means, yerr=sems,
-                    fmt=f"{PLOT_MARKERS[label]}-", color=PLOT_COLORS[label],
-                    linewidth=PLOT_STYLE["linewidth"], markersize=PLOT_STYLE["markersize"],
-                    capsize=PLOT_STYLE["capsize"], label=label.capitalize())
+                    fmt='-o', color=colors[label],
+                    linewidth=1.5, markersize=6,
+                    capsize=0, elinewidth=1.5, label=label.capitalize())
 
-    ax.set_xlabel("Trial index")
-    ax.set_ylabel("Count")
-    ax.set_title("Valid vs invalid 2-key sequences (learning, incorrect trials)")
-    ax.set_ylim(bottom=0)
-    ax.legend(frameon=False)
+    ax.set_xlabel("Trial", fontsize=18, fontweight='bold')
+    # ax.set_ylabel("Sequences / trial", fontsize=18, fontweight='bold')
+    ax.set_ylim(0.1, 1.4)
+    ax.set_yticks([0.5, 1.0])
+    ax.set_xticks([0, 10, 20])
+
+    ax.grid(False)
+    if trial_indices:
+        x_min, x_max = min(trial_indices), max(trial_indices)
+        ax.set_xlim(x_min - 1, x_max + 1)
+
+    # Update tick styling
+    ax.tick_params(axis='both', which='major', labelsize=16)
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontweight('bold')
+
+    # Match framing: hide top/right, thicken left/bottom
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(1.2)
+    ax.spines['bottom'].set_linewidth(1.2)
+
+    # Update legend with bold text
+    legend = ax.legend(frameon=False, loc='upper left', fontsize=14)
+    for text in legend.get_texts():
+        text.set_fontweight('bold')
 
     if tight_layout:
         fig.tight_layout()

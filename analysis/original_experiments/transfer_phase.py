@@ -358,38 +358,67 @@ def plot_transfer_accuracy_over_time(
     save_path: str | Path | None = None,
     show: bool = False,
 ):
-    """Plot accuracy over transfer trials for high vs low conditions."""
+    """Plot accuracy over transfer trials for high vs low conditions.
+
+    Styled to match human experiment manipulation comparison plot.
+    """
     if not rows:
         LOG.warning("No data to plot")
         return None, None
 
+    # Group data by transfer type
     grouped = {"high": defaultdict(list), "low": defaultdict(list)}
     for row in rows:
         grouped[row["transfer_type"]][int(row["trial_index"])].append(int(row["accuracy"]))
 
     trial_indices = sorted({idx for series in grouped.values() for idx in series})
-    stats = {label: _compute_time_series_stats(series, trial_indices) for label, series in grouped.items()}
+    stats = {label: _compute_time_series_stats(series, trial_indices)
+             for label, series in grouped.items()}
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    # Create figure with portrait orientation to match human experiment
+    fig, ax = plt.subplots(figsize=(6, 8))
+
+    # Plot error bars only (remove fill_between from original)
     for label in ("high", "low"):
         means, sems = stats[label]
-        lower = [max(m - s, 0.0) for m, s in zip(means, sems)]
-        upper = [min(m + s, 1.0) for m, s in zip(means, sems)]
-        if trial_indices:
-            ax.fill_between(trial_indices, lower, upper, color=PLOT_COLORS[label],
-                            alpha=PLOT_STYLE["fill_alpha"], linewidth=0)
         ax.errorbar(trial_indices, means, yerr=sems,
-                    fmt=f"{PLOT_MARKERS[label]}-", color=PLOT_COLORS[label],
-                    linewidth=PLOT_STYLE["linewidth"], markersize=PLOT_STYLE["markersize"],
-                    capsize=PLOT_STYLE["capsize"], label=f"Transfer {label.title()}")
+                    fmt='-o',
+                    color=PLOT_COLORS[label],  # Uses updated global colors
+                    linewidth=1.5,
+                    markersize=6,
+                    capsize=0,
+                    elinewidth=1.5,
+                    label=label)
 
-    ax.set_xlabel("Transfer trial index")
-    ax.set_ylabel("Accuracy")
-    ax.set_title("Transfer Phase Accuracy: High vs Low")
+    # Set axis labels with bold formatting (20pt)
+    ax.set_xlabel("Trial", fontsize=20, fontweight='bold')
+    ax.set_ylabel("Accuracy", fontsize=20, fontweight='bold')
+
+    # Set limits to match human experiment range
     if trial_indices:
         ax.set_xlim(trial_indices[0] - 0.5, trial_indices[-1] + 0.5)
-    ax.set_ylim(0, 0.6)
-    ax.legend(frameon=False)
+    ax.set_ylim(0.0, 0.3)
+    ax.set_yticks([0.1, 0.2, 0.3])
+    ax.grid(False)
+
+    # Format tick labels (16pt bold)
+    ax.tick_params(axis='both', which='major', labelsize=16)
+    for tick_label in ax.get_xticklabels() + ax.get_yticklabels():
+        tick_label.set_fontweight('bold')
+
+    # Explicitly remove spines (ensures consistency with human experiment)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    # Configure legend with title (matching human experiment)
+    legend = ax.legend(title='Manipulation',
+                      title_fontsize=18,
+                      fontsize=16,
+                      frameon=False,
+                      loc='upper right')
+    plt.setp(legend.get_title(), fontweight='bold')
+    for text in legend.get_texts():
+        text.set_fontweight('bold')
 
     fig.tight_layout()
     if save_path:

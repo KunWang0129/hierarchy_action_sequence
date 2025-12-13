@@ -567,75 +567,129 @@ def create_visualizations(participant_df: pd.DataFrame,
 
     # 5. Two-subplot figure: Learning phase vs Transfer phase per-trial success rates
     # Split learning_df into learning and transfer phases based on transfer_start
+    trial_plot_limit = 120
     learning_phase_df = learning_df[learning_df['trial_number'] < transfer_start]
     transfer_phase_df = learning_df[learning_df['trial_number'] >= transfer_start]
 
+    # Clip to max trial window and offset transfer trial numbers to start at 0
+    learning_phase_df = learning_phase_df[learning_phase_df['trial_number'] < trial_plot_limit]
+    transfer_phase_df = transfer_phase_df[transfer_phase_df['trial_number'] < trial_plot_limit].copy()
+    transfer_phase_df['transfer_trial'] = transfer_phase_df['trial_number'] - transfer_start
+
+    # Split learning phase into iterations (every 40 trials = 1 iteration)
+    learning_iter1_df = learning_phase_df[learning_phase_df['trial_number'] < 40]
+    learning_iter2_df = learning_phase_df[(learning_phase_df['trial_number'] >= 40) &
+                                           (learning_phase_df['trial_number'] < 80)]
+
+    # Split transfer phase into iterations (every 20 trials)
+    transfer_iter1_df = transfer_phase_df[(transfer_phase_df['transfer_trial'] >= 0) &
+                                           (transfer_phase_df['transfer_trial'] < 20)]
+    transfer_iter2_df = transfer_phase_df[(transfer_phase_df['transfer_trial'] >= 20) &
+                                           (transfer_phase_df['transfer_trial'] < 40)]
+    transfer_iter3_df = transfer_phase_df[(transfer_phase_df['transfer_trial'] >= 40) &
+                                           (transfer_phase_df['transfer_trial'] < 60)]
+    transfer_iter4_df = transfer_phase_df[(transfer_phase_df['transfer_trial'] >= 60) &
+                                           (transfer_phase_df['transfer_trial'] < 80)]
+
+    has_learning_data = len(learning_iter1_df) > 0 or len(learning_iter2_df) > 0
+    has_transfer_data = (
+        len(transfer_iter1_df) > 0 or len(transfer_iter2_df) > 0 or
+        len(transfer_iter3_df) > 0 or len(transfer_iter4_df) > 0
+    )
+
+    iteration_colors = {
+        '1st': '#440154',  # Purple
+        '2nd': '#31688e',  # Blue
+        '3rd': '#35b779',  # Green
+        '4th': '#fde725'   # Yellow
+    }
+
     # Only create this plot if we have data in both phases
-    if len(learning_phase_df) > 0 and len(transfer_phase_df) > 0:
-        # Scale subplot widths to reflect the number of trials in each phase
-        learning_span = int(learning_phase_df['trial_number'].max() - learning_phase_df['trial_number'].min() + 1)
-        transfer_span = int(transfer_phase_df['trial_number'].max() - transfer_phase_df['trial_number'].min() + 1)
+    if has_learning_data and has_transfer_data:
+        # Create figure with fixed width ratios matching human experiment style
         fig, (ax_learn, ax_transfer) = plt.subplots(
-            1, 2, figsize=(14, 5),
-            gridspec_kw={'width_ratios': [learning_span, transfer_span]}
+            1, 2, figsize=(10, 4.5), sharey=True,
+            gridspec_kw={'width_ratios': [3, 2]}
         )
 
-        # Common styling
-        learning_color = '#2ecc71'  # Green for learning
-        transfer_color = '#e74c3c'  # Red for transfer
+        # Left subplot: Learning phase scatter plots
+        if len(learning_iter1_df) > 0:
+            ax_learn.scatter(learning_iter1_df['trial_number'],
+                            learning_iter1_df['individual_trial_success_rate'],
+                            color=iteration_colors['1st'], s=20, alpha=0.9,
+                            edgecolors='none', label='1st')
 
-        # Left subplot: Learning phase
-        ax_learn.plot(learning_phase_df['trial_number'],
-                      learning_phase_df['individual_trial_success_rate'],
-                      marker='o', linestyle=linestyle, linewidth=linewidth, markersize=marker_size,
-                      label='Per-Trial Success Rate', color=learning_color)
-        ax_learn.fill_between(learning_phase_df['trial_number'],
-                              learning_phase_df['individual_trial_success_rate'],
-                              alpha=0.15, color=learning_color)
+        if len(learning_iter2_df) > 0:
+            ax_learn.scatter(learning_iter2_df['trial_number'],
+                            learning_iter2_df['individual_trial_success_rate'],
+                            color=iteration_colors['2nd'], s=20, alpha=0.9,
+                            edgecolors='none', label='2nd')
 
-        ax_learn.set_xlabel('Trial Number', fontsize=12)
-        ax_learn.set_ylabel('Success Rate', fontsize=12)
-        ax_learn.set_title(f'Learning Phase (Trials 0-{transfer_start - 1})', fontsize=13, fontweight='bold')
-        ax_learn.set_ylim([0, 0.6])
-        ax_learn.yaxis.set_major_formatter(percent_formatter)
-        ax_learn.xaxis.set_major_locator(MultipleLocator(10))
-        sns.despine(ax=ax_learn)
+        # Styling for learning panel
+        ax_learn.set_xlabel('Trial', fontsize=18, fontweight='bold')
+        ax_learn.set_ylabel('% Accuracy', fontsize=18, fontweight='bold')
+        ax_learn.set_title('Learning', fontsize=20, fontweight='bold')
+        ax_learn.set_ylim(-0.05, 0.65)
+        ax_learn.set_xlim(-5, 85)
 
-        # Add mean line and stats for learning phase
-        learn_mean = learning_phase_df['individual_trial_success_rate'].mean()
-        ax_learn.axhline(learn_mean, color=learning_color, linestyle='--', linewidth=1.5, alpha=0.7)
-        ax_learn.text(0.97, 0.97, f"Mean: {learn_mean:.1%}",
-                      transform=ax_learn.transAxes, verticalalignment='top', horizontalalignment='right',
-                      bbox=dict(boxstyle='round', facecolor='white', alpha=0.8), fontsize=10)
+        # Bold tick labels
+        ax_learn.tick_params(axis='both', which='major', labelsize=14)
+        for label in ax_learn.get_xticklabels() + ax_learn.get_yticklabels():
+            label.set_fontweight('bold')
 
-        # Right subplot: Transfer phase
-        ax_transfer.plot(transfer_phase_df['trial_number'],
-                         transfer_phase_df['individual_trial_success_rate'],
-                         marker='s', linestyle=linestyle, linewidth=linewidth, markersize=marker_size,
-                         label='Per-Trial Success Rate', color=transfer_color)
-        ax_transfer.fill_between(transfer_phase_df['trial_number'],
-                                 transfer_phase_df['individual_trial_success_rate'],
-                                 alpha=0.15, color=transfer_color)
+        # Remove top and right spines
+        ax_learn.spines['top'].set_visible(False)
+        ax_learn.spines['right'].set_visible(False)
+        ax_learn.grid(False)
 
-        ax_transfer.set_xlabel('Trial Number', fontsize=12)
-        ax_transfer.set_ylabel('Success Rate', fontsize=12)
-        max_trial = int(transfer_phase_df['trial_number'].max())
-        ax_transfer.set_title(f'Transfer Phase (Trials {transfer_start}-{max_trial})', fontsize=13, fontweight='bold')
-        ax_transfer.set_ylim([0, 0.6])
-        ax_transfer.yaxis.set_major_formatter(percent_formatter)
-        ax_transfer.xaxis.set_major_locator(MultipleLocator(10))
-        sns.despine(ax=ax_transfer)
+        # Right subplot: Transfer phase scatter plots
+        if len(transfer_iter1_df) > 0:
+            ax_transfer.scatter(transfer_iter1_df['transfer_trial'],
+                               transfer_iter1_df['individual_trial_success_rate'],
+                               color=iteration_colors['1st'], s=20, alpha=0.9,
+                               edgecolors='none', label='1st')
 
-        # Add mean line and stats for transfer phase
-        transfer_mean = transfer_phase_df['individual_trial_success_rate'].mean()
-        ax_transfer.axhline(transfer_mean, color=transfer_color, linestyle='--', linewidth=1.5, alpha=0.7)
-        ax_transfer.text(0.97, 0.97, f"Mean: {transfer_mean:.1%}",
-                         transform=ax_transfer.transAxes, verticalalignment='top', horizontalalignment='right',
-                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.8), fontsize=10)
+        if len(transfer_iter2_df) > 0:
+            ax_transfer.scatter(transfer_iter2_df['transfer_trial'],
+                               transfer_iter2_df['individual_trial_success_rate'],
+                               color=iteration_colors['2nd'], s=20, alpha=0.9,
+                               edgecolors='none', label='2nd')
 
-        # Main title
-        fig.suptitle(f'Per-Trial Success Rate: Learning vs Transfer Phase\n({model_name}, {goal_star})',
-                     fontsize=14, fontweight='bold', y=1.02)
+        if len(transfer_iter3_df) > 0:
+            ax_transfer.scatter(transfer_iter3_df['transfer_trial'],
+                               transfer_iter3_df['individual_trial_success_rate'],
+                               color=iteration_colors['3rd'], s=20, alpha=0.9,
+                               edgecolors='none', label='3rd')
+
+        if len(transfer_iter4_df) > 0:
+            ax_transfer.scatter(transfer_iter4_df['transfer_trial'],
+                               transfer_iter4_df['individual_trial_success_rate'],
+                               color=iteration_colors['4th'], s=20, alpha=0.9,
+                               edgecolors='none', label='4th')
+
+        # Styling for transfer panel
+        ax_transfer.set_xlabel('Trial', fontsize=18, fontweight='bold')
+        ax_transfer.set_title('Transfer', fontsize=20, fontweight='bold')
+        ax_transfer.set_ylim(-0.05, 0.65)
+        transfer_max = float(transfer_phase_df['transfer_trial'].max()) if len(transfer_phase_df) > 0 else 0
+        ax_transfer.set_xlim(-2, max(transfer_max + 5, 20))
+
+        # Bold tick labels
+        ax_transfer.tick_params(axis='both', which='major', labelsize=14)
+        for label in ax_transfer.get_xticklabels() + ax_transfer.get_yticklabels():
+            label.set_fontweight('bold')
+
+        # Remove top and right spines
+        ax_transfer.spines['top'].set_visible(False)
+        ax_transfer.spines['right'].set_visible(False)
+        ax_transfer.grid(False)
+
+        # Add legend only on transfer panel
+        legend = ax_transfer.legend(title="Star iteration", loc='upper right',
+                                   frameon=False, fontsize=8, title_fontsize=10)
+        plt.setp(legend.get_title(), fontweight='bold')
+        for text in legend.get_texts():
+            text.set_fontweight('bold')
 
         plt.tight_layout()
         phase_comparison_file = plots_dir / 'learning_vs_transfer_per_trial.png'
@@ -644,10 +698,67 @@ def create_visualizations(participant_df: pd.DataFrame,
         plt.close()
     else:
         # Log a message if we can't create the plot
-        if len(learning_phase_df) == 0:
-            print(f"⚠ Skipped learning vs transfer plot: no trials before transfer_start={transfer_start}")
-        elif len(transfer_phase_df) == 0:
-            print(f"⚠ Skipped learning vs transfer plot: no trials at or after transfer_start={transfer_start}")
+        if len(learning_iter1_df) == 0 and len(learning_iter2_df) == 0:
+            print(f"⚠ Skipped learning vs transfer plot: no learning phase iterations with data")
+        elif (len(transfer_iter1_df) == 0 and len(transfer_iter2_df) == 0 and
+              len(transfer_iter3_df) == 0 and len(transfer_iter4_df) == 0):
+            print(f"⚠ Skipped learning vs transfer plot: no transfer phase iterations with data")
+
+    # Transfer-only plot with the same styling as the transfer panel above
+    if has_transfer_data:
+        fig, ax_transfer_only = plt.subplots(figsize=(5, 4.5))
+
+        if len(transfer_iter1_df) > 0:
+            ax_transfer_only.scatter(transfer_iter1_df['transfer_trial'],
+                                     transfer_iter1_df['individual_trial_success_rate'],
+                                     color=iteration_colors['1st'], s=20, alpha=0.9,
+                                     edgecolors='none', label='1st')
+
+        if len(transfer_iter2_df) > 0:
+            ax_transfer_only.scatter(transfer_iter2_df['transfer_trial'],
+                                     transfer_iter2_df['individual_trial_success_rate'],
+                                     color=iteration_colors['2nd'], s=20, alpha=0.9,
+                                     edgecolors='none', label='2nd')
+
+        if len(transfer_iter3_df) > 0:
+            ax_transfer_only.scatter(transfer_iter3_df['transfer_trial'],
+                                     transfer_iter3_df['individual_trial_success_rate'],
+                                     color=iteration_colors['3rd'], s=20, alpha=0.9,
+                                     edgecolors='none', label='3rd')
+
+        if len(transfer_iter4_df) > 0:
+            ax_transfer_only.scatter(transfer_iter4_df['transfer_trial'],
+                                     transfer_iter4_df['individual_trial_success_rate'],
+                                     color=iteration_colors['4th'], s=20, alpha=0.9,
+                                     edgecolors='none', label='4th')
+
+        ax_transfer_only.set_xlabel('Trial', fontsize=18, fontweight='bold')
+        # ax_transfer_only.set_title('Transfer', fontsize=20, fontweight='bold')
+        ax_transfer_only.set_ylim(-0.05, 0.65)
+        transfer_max = float(transfer_phase_df['transfer_trial'].max()) if len(transfer_phase_df) > 0 else 0
+        ax_transfer_only.set_xlim(-2, max(transfer_max + 5, 20))
+        ax_transfer_only.set_ylabel('% Accuracy', fontsize=18, fontweight='bold')
+
+
+        ax_transfer_only.tick_params(axis='both', which='major', labelsize=14)
+        for label in ax_transfer_only.get_xticklabels() + ax_transfer_only.get_yticklabels():
+            label.set_fontweight('bold')
+
+        ax_transfer_only.spines['top'].set_visible(False)
+        ax_transfer_only.spines['right'].set_visible(False)
+        ax_transfer_only.grid(False)
+
+        legend = ax_transfer_only.legend(title="Star iteration", loc='upper right',
+                                         frameon=False, fontsize=8, title_fontsize=10)
+        plt.setp(legend.get_title(), fontweight='bold')
+        for text in legend.get_texts():
+            text.set_fontweight('bold')
+
+        plt.tight_layout()
+        transfer_only_file = plots_dir / 'transfer_per_trial.png'
+        plt.savefig(transfer_only_file, bbox_inches='tight')
+        print(f"✓ Saved transfer-only per-trial plot to {transfer_only_file}")
+        plt.close()
 
 
 def print_summary_statistics(participant_df: pd.DataFrame,

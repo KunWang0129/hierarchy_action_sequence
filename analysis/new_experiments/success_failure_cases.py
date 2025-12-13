@@ -846,6 +846,10 @@ def plot_learning_transfer_scatter(
     x = [learning_rates[pid] for pid in sorted(common_pids)]
     y = [transfer_rates[pid] for pid in sorted(common_pids)]
 
+    title_fontsize = 18
+    label_fontsize = 14
+    legend_fontsize = 12
+
     fig, ax = plt.subplots(figsize=(8, 8))
 
     # Scatter plot
@@ -863,22 +867,39 @@ def plot_learning_transfer_scatter(
                f"Spearman ρ = {spearman_r:.3f} (p = {spearman_p:.2e})\n"
                f"N = {len(common_pids)}")
     props = dict(boxstyle="round", facecolor="white", alpha=0.8)
-    ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10,
-            verticalalignment="top", bbox=props)
+    ax.text(
+        0.05,
+        0.95,
+        textstr,
+        transform=ax.transAxes,
+        fontsize=legend_fontsize,
+        fontweight="bold",
+        verticalalignment="top",
+        bbox=props,
+    )
 
     # Identity line (y=x) for reference
     lims = [min(min(x), min(y)), max(max(x), max(y))]
     ax.plot(lims, lims, "k:", alpha=0.5, label="y = x (identity)")
 
-    ax.set_xlabel("Learning Phase Success Rate")
-    ax.set_ylabel("Transfer Phase Success Rate")
+    ax.set_xlabel("Learning Phase Success Rate", fontsize=label_fontsize, fontweight="bold")
+    ax.set_ylabel("Transfer Phase Success Rate", fontsize=label_fontsize, fontweight="bold")
     title = "Learning vs Transfer Success Rate"
     if condition_label:
         title += f" ({condition_label})"
-    ax.set_title(title)
-    ax.legend(loc="lower right", frameon=True)
+    ax.set_title(title, fontsize=title_fontsize, fontweight="bold")
+    legend = ax.legend(
+        loc="lower right",
+        frameon=True,
+        prop={"size": legend_fontsize, "weight": "bold"},
+    )
+    if legend:
+        for text in legend.get_texts():
+            text.set_fontweight("bold")
+
     ax.set_xlim(-0.05, 1.05)
     ax.set_ylim(-0.05, 1.05)
+    ax.tick_params(labelsize=label_fontsize, width=1.2)
     plt.tight_layout()
 
     if save_path:

@@ -65,6 +65,8 @@ setup_plot_style()
 
 LOG = logging.getLogger(__name__)
 INVALID_2_SEQ = {(0, 2), (2, 1), (1, 3), (3, 1)}
+ACCURACY_HIGH_COLOR = "#E15759"  # red, matches manipulation high in Section 2 styling
+ACCURACY_LOW_COLOR = "#4EBFD8"   # cyan, matches manipulation low in Section 2 styling
 
 
 # ============================================================================
@@ -424,6 +426,49 @@ def collect_accuracy_rows(
 
 
 # ============================================================================
+# Accuracy Plot Styling Helpers
+# ============================================================================
+
+
+def _apply_accuracy_style(
+    ax,
+    max_trial: int,
+    add_ylabel: bool = False,
+    y_max: float = 0.65,
+    y_ticks: Sequence[float] | None = None,
+) -> None:
+    """Apply consistent styling to accuracy plots (mimics Section 2 aesthetic)."""
+    right_limit = max(5, max_trial + 1)
+    tick_limit = max(25, right_limit)
+
+    ax.set_xlabel("Trial", fontsize=18, fontweight="bold")
+    if add_ylabel:
+        ax.set_ylabel("Accuracy", fontsize=18, fontweight="bold")
+
+    ax.set_xlim(-0.5, right_limit)
+    ax.set_ylim(0.0, y_max)
+    ax.set_xticks(range(0, tick_limit + 1, 5))
+    if y_ticks is None:
+        y_ticks = [0.2, 0.4, 0.6]
+    ax.set_yticks(y_ticks)
+    ax.tick_params(axis="both", which="major", labelsize=14)
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontweight("bold")
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+
+def _format_accuracy_legend(ax, title: str, loc: str = "upper right") -> None:
+    legend = ax.legend(title=title, title_fontsize=16, fontsize=14,
+                       frameon=False, loc=loc)
+    if legend:
+        plt.setp(legend.get_title(), fontweight="bold")
+        for text in legend.get_texts():
+            text.set_fontweight("bold")
+
+
+# ============================================================================
 # Plot: Learning Phase Accuracy Comparison
 # ============================================================================
 
@@ -433,13 +478,15 @@ def plot_learning_accuracy_comparison(
     save_path: Path | None = None,
     show: bool = False,
 ):
-    """Plot learning accuracy: item (blue) vs no_item (red) over trials."""
-    fig, ax = plt.subplots(figsize=(10, 6))
+    """Plot learning accuracy with Section 2-style palette (red vs cyan)."""
+    fig, ax = plt.subplots(figsize=(9, 6))
 
     datasets = [
-        (item_rows, "Item", PLOT_COLORS["valid"]),      # blue
-        (no_item_rows, "No Item", PLOT_COLORS["invalid"]),  # red
+        (item_rows, "Item", ACCURACY_HIGH_COLOR),
+        (no_item_rows, "No Item", ACCURACY_LOW_COLOR),
     ]
+
+    max_trial_idx = 0
 
     for rows, label, color in datasets:
         if not rows:
@@ -453,19 +500,17 @@ def plot_learning_accuracy_comparison(
         trial_indices = sorted(trial_data.keys())
         means, sems = _compute_trial_statistics(trial_data)
 
+        max_trial_idx = max(max_trial_idx, trial_indices[-1]) if trial_indices else max_trial_idx
+
         ax.errorbar(
             trial_indices, means, yerr=sems,
-            fmt="o-", color=color, label=label,
-            linewidth=PLOT_STYLE["linewidth"],
-            markersize=PLOT_STYLE["markersize"],
-            capsize=PLOT_STYLE["capsize"],
+            fmt="-o", color=color, label=label,
+            linewidth=1.5, elinewidth=1.5, markersize=6, capsize=0,
         )
 
-    ax.set_xlabel("Trial Index")
-    ax.set_ylabel("Accuracy")
-    ax.set_ylim(-0.05, 0.6)
-    ax.set_title("Learning Phase: Item vs No Item Accuracy (First 40 Trials)", fontweight="bold")
-    ax.legend(frameon=False)
+    ax.set_title("Learning Phase", fontweight="bold", fontsize=18)
+    _apply_accuracy_style(ax, max_trial_idx, add_ylabel=True)
+    _format_accuracy_legend(ax, title="Condition", loc="upper right")
 
     plt.tight_layout()
 
@@ -489,19 +534,21 @@ def plot_transfer_accuracy_comparison(
     save_path: Path | None = None,
     show: bool = False,
 ):
-    """Plot transfer accuracy: 2 subplots (high/low), item (blue) vs no_item (red)."""
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    """Plot transfer accuracy: 2 subplots (high/low) using Section 2-style palette."""
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
 
     subplot_data = [
-        (item_high_rows, no_item_high_rows, "Transfer High", axes[0]),
-        (item_low_rows, no_item_low_rows, "Transfer Low", axes[1]),
+        (item_high_rows, no_item_high_rows, "Manipulation High", axes[0]),
+        (item_low_rows, no_item_low_rows, "Manipulation Low", axes[1]),
     ]
 
     for item_rows, no_item_rows, title, ax in subplot_data:
         datasets = [
-            (item_rows, "Item", PLOT_COLORS["valid"]),      # blue
-            (no_item_rows, "No Item", PLOT_COLORS["invalid"]),  # red
+            (item_rows, "Item", ACCURACY_HIGH_COLOR),
+            (no_item_rows, "No Item", ACCURACY_LOW_COLOR),
         ]
+
+        max_trial_idx = 0
 
         for rows, label, color in datasets:
             if not rows:
@@ -514,21 +561,25 @@ def plot_transfer_accuracy_comparison(
             trial_indices = sorted(trial_data.keys())
             means, sems = _compute_trial_statistics(trial_data)
 
+            max_trial_idx = max(max_trial_idx, trial_indices[-1]) if trial_indices else max_trial_idx
+
             ax.errorbar(
                 trial_indices, means, yerr=sems,
-                fmt="o-", color=color, label=label,
-                linewidth=PLOT_STYLE["linewidth"],
-                markersize=PLOT_STYLE["markersize"],
-                capsize=PLOT_STYLE["capsize"],
+                fmt="-o", color=color, label=label,
+                linewidth=1.5, elinewidth=1.5, markersize=6, capsize=0,
             )
 
-        ax.set_xlabel("Trial Index")
-        ax.set_ylabel("Accuracy")
-        ax.set_ylim(-0.05, 0.6)
-        ax.set_title(title, fontweight="bold")
-        ax.legend(frameon=False)
+        ax.set_title(title, fontweight="bold", fontsize=18)
+        _apply_accuracy_style(
+            ax,
+            max_trial_idx,
+            add_ylabel=(title == "Manipulation High"),
+            y_max=0.35,
+            y_ticks=[0.1, 0.2, 0.3],
+        )
+        _format_accuracy_legend(ax, title="Condition", loc="upper right")
 
-    fig.suptitle("Transfer Phase: Item vs No Item Accuracy (First 40 Trials)", fontweight="bold", y=1.02)
+    fig.suptitle("Transfer Phase", fontweight="bold", fontsize=18, y=1.03)
     plt.tight_layout()
 
     if save_path:

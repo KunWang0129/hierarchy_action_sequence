@@ -16,8 +16,8 @@ from typing import Callable, Iterable, Sequence
 PLOT_COLORS = {
     "invalid": "#e63946",      # red
     "valid": "#1d3557",        # blue
-    "high": "#e63946",         # red (transfer high)
-    "low": "#1d3557",          # blue (transfer low)
+    "high": "#E15759",         # red (transfer high)
+    "low": "#4EBFD8",          # cyan (transfer low)
 }
 PLOT_MARKERS = {"valid": "o", "invalid": "s", "high": "o", "low": "s"}
 PLOT_STYLE = {
